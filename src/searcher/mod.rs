@@ -14,11 +14,11 @@ pub struct Occurrences {
 pub fn search(
     producer: mpsc::Sender<Occurrences>,
     chunk: String,
-    search: String,
+    search: &'static str,
     chunk_index: usize,
 ) {
     thread::spawn(move || {
-        let positions = get_positions(&chunk, search.as_str());
+        let positions = get_positions(&chunk, search);
         let mut lines = chunk.split('\n');
 
         let mut line = lines.next();
@@ -35,7 +35,7 @@ pub fn search(
 
                     Some(current_line) => {
                         if pos >= total_chars && pos <= total_chars + (current_line.len()) {
-                            if cache_bulk_line.contains(&line_index.clone()) {
+                            if cache_bulk_line.contains(&line_index) {
                                 continue 'positions_loop;
                             }
 
@@ -56,14 +56,14 @@ pub fn search(
         }
 
         // It's the red underscore you're used to with grep.
-        let replacer: String = format!("{}{}{}", BOLD_RED, search, RESET);
-
+        let replacer = format!("{}{}{}", BOLD_RED, search, RESET);
+        let replacer_str = replacer.as_str();
 
         if bulk_lines.len() > 0 {
             producer
                 .send(Occurrences {
                     chunk_index,
-                    bulk_lines: bulk_lines.replace(search.as_str(), replacer.as_str()),
+                    bulk_lines: bulk_lines.replace(search, replacer_str),
                 })
                 .unwrap();
         }
