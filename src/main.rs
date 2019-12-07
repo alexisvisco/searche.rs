@@ -9,7 +9,8 @@ mod searcher;
 mod reader;
 mod printer;
 
-const BUFFER_SIZE: usize = 4096 * 20;
+const BUFFER_SIZE: usize = 1024 * 128;
+const WORKERS: usize = 1 << 3;
 
 /// This program is a grep that dispatch the searcher process into different threads.
 /// Then join the matched lines through a channel and finally print the lines.
@@ -20,7 +21,7 @@ fn main() {
     }
 
     let filename = args().nth(1).unwrap();
-    let search : String = args().nth(2).unwrap();
+    let search: String = args().nth(2).unwrap();
     let static_search_to_free: &'static str = string_to_static_str(search);
 
     let file = File::open(filename.as_str());
@@ -41,6 +42,7 @@ fn string_to_static_str(s: String) -> &'static str {
 fn search_in_file(file: &File, search: &'static str) {
     let mut buffer_reader = BufReader::with_capacity(BUFFER_SIZE, file);
     let mut chunk_index = 0;
+    let pool_of_thread = rayon::ThreadPoolBuilder::new().num_threads(WORKERS).build().unwrap();
 
     let (tx, rx) = mpsc::channel::<searcher::Occurrences>();
 
@@ -49,7 +51,7 @@ fn search_in_file(file: &File, search: &'static str) {
 
         match buffer {
             None => break,
-            Some(buffer) => searcher::search(tx.clone(), buffer, search, chunk_index),
+            Some(buffer) => searcher::search(&pool_of_thread, tx.clone(), buffer, search, chunk_index),
         }
 
         chunk_index += 1;

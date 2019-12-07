@@ -1,5 +1,4 @@
 use std::sync::mpsc;
-use std::thread;
 use std::collections::HashSet;
 
 const BOLD_RED: &str = "\x1b[1;31m";
@@ -12,16 +11,18 @@ pub struct Occurrences {
 }
 
 pub fn search(
+    pool_of_thread: &rayon::ThreadPool,
     producer: mpsc::Sender<Occurrences>,
     chunk: String,
     search: &'static str,
     chunk_index: usize,
 ) {
-    thread::spawn(move || {
+    pool_of_thread.spawn(move || {
         let positions = get_positions(&chunk, search);
         let mut lines = chunk.split('\n');
 
-        let mut line = lines.next();
+        let mut line = lines.next().unwrap_or("");
+
         let mut total_chars = 0;
         let mut line_index = 0;
 
@@ -30,40 +31,36 @@ pub fn search(
 
         'positions_loop: for pos in positions {
             loop {
-                match line {
-                    None => break 'positions_loop,
-
-                    Some(current_line) => {
-                        if pos >= total_chars && pos <= total_chars + (current_line.len()) {
-                            if cache_bulk_line.contains(&line_index) {
-                                continue 'positions_loop;
-                            }
-
-                            cache_bulk_line.insert(line_index.clone());
-
-                            bulk_lines.push_str(current_line);
-                            bulk_lines.push('\n');
-
-                            continue 'positions_loop;
-                        }
-
-                        total_chars += current_line.len() + 1;
-                        line_index += 1;
-                        line = lines.next();
+                if pos >= total_chars && pos <= total_chars + (line.len()) {
+                    if cache_bulk_line.contains(&line_index) {
+                        continue 'positions_loop;
                     }
+
+                    cache_bulk_line.insert(line_index.clone());
+
+                    bulk_lines.push_str(format!("{}{}", line, '\n').as_str());
+                    continue 'positions_loop;
+                }
+
+                total_chars += line.len() + 1;
+                line_index += 1;
+
+                match lines.next() {
+                    Some(l) => line = l,
+                    None => break 'positions_loop
                 }
             }
         }
 
-        // It's the red underscore you're used to with grep.
-        let replacer = format!("{}{}{}", BOLD_RED, search, RESET);
-        let replacer_str = replacer.as_str();
+//        // It's the red underscore you're used to with grep.
+//        let replacer = format!("{}{}{}", BOLD_RED, search, RESET);
+//        let replacer_str = replacer.as_str();
 
         if bulk_lines.len() > 0 {
             producer
                 .send(Occurrences {
                     chunk_index,
-                    bulk_lines: bulk_lines.replace(search, replacer_str),
+                    bulk_lines,
                 })
                 .unwrap();
         }

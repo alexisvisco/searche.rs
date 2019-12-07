@@ -37,7 +37,7 @@ pub fn read(buffer_reader: &mut BufReader<&File>) -> Option<String> {
                     return None;
                 }
 
-                full_line.push_str(buffer_str.to_owned().as_str());
+                full_line.push_str(buffer_str.as_str());
 
                 if end_with_newline(buffer_str) {
                     return Some(full_line);
@@ -64,8 +64,7 @@ fn read_until_newline(buffer_reader: &mut BufReader<&File>, full_line: &mut Stri
 
     match str::from_utf8(&buf) {
         Ok(s) => {
-            full_line.push_str(s);
-            return Some(full_line.to_string());
+            return Some(format!("{}{}", full_line, s));
         }
         Err(err) => {
             panic!("bgrep: err: {}", err);
